@@ -195,10 +195,72 @@ glm-codex: ... - ✓ Connected
 | `skip_git_repo_check` | bool | - | `true` | 是否允许在非 Git 仓库运行 |
 | `image` | List[Path]| - | `[]` | 附加图片列表（用于 UI 审查等） |
 
-## 全局推荐提示词
+## 📝 提示词配置
+
+本项目提供两种提示词配置方案，根据你的需求选择：
+
+| 方案 | 适用场景 | Token 消耗 | 配置复杂度 |
+|------|----------|-----------|-----------|
+| **Skill 方案** | 推荐，按需加载 | 低 | 需安装 Skill |
+| **传统方案** | 简单直接 | 较高 | 仅需编辑 CLAUDE.md |
+
+---
+
+### 方案一：Skill 方案（推荐）
+
+使用 Claude Code Skill 实现按需加载，仅在代码任务时触发，节约 Token。
+
+**安装 Skill**：
+
+```bash
+# 复制 Skill 文件到 Claude Code 目录
+
+# Windows (PowerShell)
+if (!(Test-Path "$env:USERPROFILE\.claude\skills")) { mkdir "$env:USERPROFILE\.claude\skills" }
+xcopy /E /I "skills\glm-codex-workflow" "$env:USERPROFILE\.claude\skills\glm-codex-workflow"
+
+# macOS/Linux
+mkdir -p ~/.claude/skills
+cp -r skills/glm-codex-workflow ~/.claude/skills/
+```
+
+**配置精简版 CLAUDE.md**（添加到 `~/.claude/CLAUDE.md`）：
+
+```markdown
+# 全局配置
+
+## GLM-CODEX 协作
+
+GLM 是你的代码执行者，Codex 是你的代码审核者。**所有代码决策权归你（Claude）所有**。
+
+当进行代码开发任务时，会自动触发 `glm-codex-workflow` Skill，提供详细协作指南。
+
+### 快速参考
+
+- **GLM**：代码生成/修改，`sandbox=workspace-write`
+- **Codex**：代码审核，`sandbox=read-only`（严禁修改）
+- **会话复用**：保存 `SESSION_ID` 保持上下文
+
+### 核心原则
+
+1. GLM/Codex 意见仅供参考，你必须独立判断
+2. 编码后推荐调用 Codex review
+3. 若 Codex 指出问题，修复后再次 review
+```
+
+**优势**：
+- 非代码任务不加载协作指南（约 180 行 → 20 行，估算节约 ~80% Token）
+- 代码任务自动触发，无需手动调用
+- 详细规范按需读取，渐进式披露
+
+---
+
+### 方案二：传统方案
+
+直接将完整提示词添加到 CLAUDE.md，每次对话都加载。
 
 <details>
-<summary>点击展开全局提示词配置（推荐添加到 ~/.claude/CLAUDE.md）</summary>
+<summary>点击展开完整提示词配置</summary>
 
 ````markdown
 # GLM-CODEX-MCP 协作指南
@@ -216,7 +278,7 @@ GLM 是你的代码执行者，Codex 是你的代码审核者。**所有代码�
 
 **1. 编码前（可选）**
 
-复杂任务可先调用 Codex 讨论思路，获取建议。但最终方案由你决定。
+复杂任务可先自行分析拆解，明确方案后再委托 GLM 执行。
 
 **2. 编码中**
 

@@ -195,10 +195,72 @@ Calls Codex for independent and strict code review.
 | `skip_git_repo_check` | bool | - | `true` | Whether to allow running in non-Git repositories |
 | `image` | List[Path]| - | `[]` | List of additional images (for UI review, etc.) |
 
-## Global Recommended Prompts
+## 📝 Prompt Configuration
+
+This project provides two prompt configuration options:
+
+| Option | Use Case | Token Usage | Setup Complexity |
+|--------|----------|-------------|------------------|
+| **Skill Option** | Recommended, on-demand loading | Low | Requires Skill installation |
+| **Traditional Option** | Simple and direct | Higher | Only edit CLAUDE.md |
+
+---
+
+### Option 1: Skill Option (Recommended)
+
+Uses Claude Code Skill for on-demand loading, only triggers during code tasks, saving tokens.
+
+**Install Skill**:
+
+```bash
+# Copy Skill files to Claude Code directory
+
+# Windows (PowerShell)
+if (!(Test-Path "$env:USERPROFILE\.claude\skills")) { mkdir "$env:USERPROFILE\.claude\skills" }
+xcopy /E /I "skills\glm-codex-workflow" "$env:USERPROFILE\.claude\skills\glm-codex-workflow"
+
+# macOS/Linux
+mkdir -p ~/.claude/skills
+cp -r skills/glm-codex-workflow ~/.claude/skills/
+```
+
+**Configure minimal CLAUDE.md** (add to `~/.claude/CLAUDE.md`):
+
+```markdown
+# Global Configuration
+
+## GLM-CODEX Collaboration
+
+GLM is your code executor, Codex is your code reviewer. **All code decisions belong to you (Claude)**.
+
+When performing code development tasks, the `glm-codex-workflow` Skill will automatically trigger.
+
+### Quick Reference
+
+- **GLM**: Code generation/modification, `sandbox=workspace-write`
+- **Codex**: Code review, `sandbox=read-only` (no modifications allowed)
+- **Session Reuse**: Save `SESSION_ID` to maintain context
+
+### Core Principles
+
+1. GLM/Codex opinions are for reference only; you must judge independently
+2. Recommend calling Codex review after coding
+3. If Codex points out issues, fix and review again
+```
+
+**Advantages**:
+- Non-code tasks don't load collaboration guide (~180 lines → 20 lines, ~80% token savings)
+- Code tasks auto-trigger, no manual invocation needed
+- Detailed specs loaded on-demand, progressive disclosure
+
+---
+
+### Option 2: Traditional Option
+
+Add complete prompts directly to CLAUDE.md, loaded every conversation.
 
 <details>
-<summary>Click to expand global prompt configuration (Recommended to add to ~/.claude/CLAUDE.md)</summary>
+<summary>Click to expand full prompt configuration</summary>
 
 ````markdown
 # GLM-CODEX-MCP Collaboration Guide
@@ -216,7 +278,7 @@ GLM is your code executor, Codex is your code reviewer. **All code decisions bel
 
 **1. Pre-coding (Optional)**
 
-For complex tasks, consult Codex for ideas first. But the final plan is yours.
+For complex tasks, analyze and decompose first, then delegate to GLM after clarifying the plan.
 
 **2. During Coding**
 
