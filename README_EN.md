@@ -181,7 +181,7 @@ Calls the GLM-4.7 model to execute specific code generation or modification task
 | `sandbox` | string | - | `workspace-write` | Sandbox policy, write allowed by default |
 | `SESSION_ID` | string | - | `""` | Session ID, used to maintain multi-turn context |
 | `return_all_messages` | bool | - | `false` | Whether to return full conversation history (for debugging) |
-| `return_metrics` | bool | - | `true` | Whether to include metrics in return value |
+| `return_metrics` | bool | - | `false` | Whether to include metrics in return value |
 | `timeout` | int | - | `300` | Idle timeout (seconds), triggers when no output for this duration |
 | `max_duration` | int | - | `1800` | Max duration limit (seconds), default 30 min, 0 for unlimited |
 | `max_retries` | int | - | `0` | Max retry count (GLM defaults to no retry) |
@@ -201,7 +201,7 @@ Calls Codex for independent and strict code review.
 | `return_all_messages` | bool | - | `false` | Whether to return full conversation history (for debugging) |
 | `image` | List[Path]| - | `[]` | List of additional images (for UI review, etc.) |
 | `model` | string | - | `""` | Specify model, defaults to Codex's own config |
-| `return_metrics` | bool | - | `true` | Whether to include metrics in return value |
+| `return_metrics` | bool | - | `false` | Whether to include metrics in return value |
 | `timeout` | int | - | `300` | Idle timeout (seconds), triggers when no output for this duration |
 | `max_duration` | int | - | `1800` | Max duration limit (seconds), default 30 min, 0 for unlimited |
 | `max_retries` | int | - | `1` | Max retry count (Codex defaults to 1 retry) |
@@ -365,19 +365,81 @@ Opinions from Codex and GLM are **for reference only**. You must use your own ju
 
 **Return Value**:
 ```json
-// On Success
+// On Success (default, return_metrics=false)
 {
   "success": true,
   "tool": "glm",
-  "SESSION_ID": "uuid-string",  // ← Save this for subsequent turns
-  "result": "GLM response text"
+  "SESSION_ID": "uuid-string",
+  "result": "Response content"
 }
 
-// On Failure
+// On Success (with metrics, return_metrics=true)
+{
+  "success": true,
+  "tool": "glm",
+  "SESSION_ID": "uuid-string",
+  "result": "Response content",
+  "metrics": {
+    "ts_start": "2026-01-02T10:00:00.000Z",
+    "ts_end": "2026-01-02T10:00:05.123Z",
+    "duration_ms": 5123,
+    "tool": "glm",
+    "sandbox": "workspace-write",
+    "success": true,
+    "retries": 0,
+    "exit_code": 0,
+    "prompt_chars": 256,
+    "prompt_lines": 10,
+    "result_chars": 1024,
+    "result_lines": 50,
+    "raw_output_lines": 60,
+    "json_decode_errors": 0
+  }
+}
+
+// On Failure (structured error, default)
 {
   "success": false,
   "tool": "glm",
-  "error": "Error message"
+  "error": "Error summary",
+  "error_kind": "idle_timeout | timeout | upstream_error | ...",
+  "error_detail": {
+    "message": "Brief error description",
+    "exit_code": 1,
+    "last_lines": ["Last 20 lines of output..."],
+    "idle_timeout_s": 300,
+    "max_duration_s": 1800
+    // "retries": 1  // Only returned when retries > 0
+  }
+}
+
+// On Failure (with metrics, return_metrics=true)
+{
+  "success": false,
+  "tool": "glm",
+  "error": "Error summary",
+  "error_kind": "idle_timeout | timeout | upstream_error | ...",
+  "error_detail": {
+    "message": "Brief error description",
+    "exit_code": 1,
+    "last_lines": ["Last 20 lines of output..."],
+    "idle_timeout_s": 300,
+    "max_duration_s": 1800
+    // "retries": 1  // Only returned when retries > 0
+  },
+  "metrics": {
+    "ts_start": "2026-01-02T10:00:00.000Z",
+    "ts_end": "2026-01-02T10:00:05.123Z",
+    "duration_ms": 5123,
+    "tool": "glm",
+    "sandbox": "workspace-write",
+    "success": false,
+    "retries": 0,
+    "exit_code": 1,
+    "prompt_chars": 256,
+    "prompt_lines": 10,
+    "json_decode_errors": 0
+  }
 }
 ```
 
@@ -428,19 +490,81 @@ Please strictly modify code within the scope above, and explain changes after co
 
 **Return Value**:
 ```json
-// On Success
+// On Success (default, return_metrics=false)
 {
   "success": true,
   "tool": "codex",
-  "SESSION_ID": "uuid-string",  // ← Save this for subsequent turns
-  "result": "Codex response text"
+  "SESSION_ID": "uuid-string",
+  "result": "Response content"
 }
 
-// On Failure
+// On Success (with metrics, return_metrics=true)
+{
+  "success": true,
+  "tool": "codex",
+  "SESSION_ID": "uuid-string",
+  "result": "Response content",
+  "metrics": {
+    "ts_start": "2026-01-02T10:00:00.000Z",
+    "ts_end": "2026-01-02T10:00:05.123Z",
+    "duration_ms": 5123,
+    "tool": "codex",
+    "sandbox": "read-only",
+    "success": true,
+    "retries": 0,
+    "exit_code": 0,
+    "prompt_chars": 256,
+    "prompt_lines": 10,
+    "result_chars": 1024,
+    "result_lines": 50,
+    "raw_output_lines": 60,
+    "json_decode_errors": 0
+  }
+}
+
+// On Failure (structured error, default)
 {
   "success": false,
   "tool": "codex",
-  "error": "Error message"
+  "error": "Error summary",
+  "error_kind": "idle_timeout | timeout | upstream_error | ...",
+  "error_detail": {
+    "message": "Brief error description",
+    "exit_code": 1,
+    "last_lines": ["Last 20 lines of output..."],
+    "idle_timeout_s": 300,
+    "max_duration_s": 1800
+    // "retries": 1  // Only returned when retries > 0
+  }
+}
+
+// On Failure (with metrics, return_metrics=true)
+{
+  "success": false,
+  "tool": "codex",
+  "error": "Error summary",
+  "error_kind": "idle_timeout | timeout | upstream_error | ...",
+  "error_detail": {
+    "message": "Brief error description",
+    "exit_code": 1,
+    "last_lines": ["Last 20 lines of output..."],
+    "idle_timeout_s": 300,
+    "max_duration_s": 1800
+    // "retries": 1  // Only returned when retries > 0
+  },
+  "metrics": {
+    "ts_start": "2026-01-02T10:00:00.000Z",
+    "ts_end": "2026-01-02T10:00:05.123Z",
+    "duration_ms": 5123,
+    "tool": "codex",
+    "sandbox": "read-only",
+    "success": false,
+    "retries": 0,
+    "exit_code": 1,
+    "prompt_chars": 256,
+    "prompt_lines": 10,
+    "json_decode_errors": 0
+  }
 }
 ```
 

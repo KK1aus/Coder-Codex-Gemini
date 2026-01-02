@@ -9,7 +9,7 @@
 | sandbox | string | | 默认 `workspace-write` |
 | SESSION_ID | string | | 会话 ID，复用保持上下文 |
 | return_all_messages | boolean | | 调试时设为 True |
-| return_metrics | boolean | | 返回值中包含指标数据，默认 True |
+| return_metrics | boolean | | 返回值中包含指标数据，默认 False |
 | timeout | int | | 空闲超时（秒），默认 300，无输出超过此时间触发 |
 | max_duration | int | | 总时长硬上限（秒），默认 1800（30 分钟），0 表示无限制 |
 | max_retries | int | | 最大重试次数，默认 0（不重试） |

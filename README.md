@@ -181,7 +181,7 @@ glm-codex: ... - ✓ Connected
 | `sandbox` | string | - | `workspace-write` | 沙箱策略，默认允许写入 |
 | `SESSION_ID` | string | - | `""` | 会话 ID，用于维持多轮对话上下文 |
 | `return_all_messages` | bool | - | `false` | 是否返回完整的对话历史（用于调试） |
-| `return_metrics` | bool | - | `true` | 是否在返回值中包含耗时等指标 |
+| `return_metrics` | bool | - | `false` | 是否在返回值中包含耗时等指标 |
 | `timeout` | int | - | `300` | 空闲超时（秒），无输出超过此时间触发超时 |
 | `max_duration` | int | - | `1800` | 总时长硬上限（秒），默认 30 分钟，0 表示无限制 |
 | `max_retries` | int | - | `0` | 最大重试次数（GLM 默认不重试） |
@@ -201,7 +201,7 @@ glm-codex: ... - ✓ Connected
 | `return_all_messages` | bool | - | `false` | 是否返回完整的对话历史（用于调试） |
 | `image` | List[Path]| - | `[]` | 附加图片列表（用于 UI 审查等） |
 | `model` | string | - | `""` | 指定模型，默认使用 Codex 自己的配置 |
-| `return_metrics` | bool | - | `true` | 是否在返回值中包含耗时等指标 |
+| `return_metrics` | bool | - | `false` | 是否在返回值中包含耗时等指标 |
 | `timeout` | int | - | `300` | 空闲超时（秒），无输出超过此时间触发超时 |
 | `max_duration` | int | - | `1800` | 总时长硬上限（秒），默认 30 分钟，0 表示无限制 |
 | `max_retries` | int | - | `1` | 最大重试次数（Codex 默认允许 1 次重试） |
@@ -225,7 +225,15 @@ glm-codex: ... - ✓ Connected
 ### 返回值结构
 
 ```json
-// 成功（return_metrics 默认为 true）
+// 成功（默认行为，return_metrics=false）
+{
+  "success": true,
+  "tool": "glm",
+  "SESSION_ID": "uuid-string",
+  "result": "回复内容"
+}
+
+// 成功（启用指标，return_metrics=true）
 {
   "success": true,
   "tool": "glm",
@@ -249,7 +257,7 @@ glm-codex: ... - ✓ Connected
   }
 }
 
-// 失败（结构化错误）
+// 失败（结构化错误，默认行为）
 {
   "success": false,
   "tool": "glm",
@@ -260,10 +268,38 @@ glm-codex: ... - ✓ Connected
     "exit_code": 1,
     "last_lines": ["最后20行输出..."],
     "idle_timeout_s": 300,
-    "max_duration_s": 1800,
-    "retries": 0
+    "max_duration_s": 1800
+    // "retries": 1  // 仅在 retries > 0 时返回
+  }
+}
+
+// 失败（启用指标，return_metrics=true）
+{
+  "success": false,
+  "tool": "glm",
+  "error": "错误摘要",
+  "error_kind": "idle_timeout | timeout | upstream_error | ...",
+  "error_detail": {
+    "message": "错误简述",
+    "exit_code": 1,
+    "last_lines": ["最后20行输出..."],
+    "idle_timeout_s": 300,
+    "max_duration_s": 1800
+    // "retries": 1  // 仅在 retries > 0 时返回
   },
-  "metrics": { ... }
+  "metrics": {
+    "ts_start": "2026-01-02T10:00:00.000Z",
+    "ts_end": "2026-01-02T10:00:05.123Z",
+    "duration_ms": 5123,
+    "tool": "glm",
+    "sandbox": "workspace-write",
+    "success": false,
+    "retries": 0,
+    "exit_code": 1,
+    "prompt_chars": 256,
+    "prompt_lines": 10,
+    "json_decode_errors": 0
+  }
 }
 ```
 

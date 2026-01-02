@@ -9,7 +9,7 @@
 | sandbox | string | | **必须** `read-only` |
 | SESSION_ID | string | | 会话 ID |
 | return_all_messages | boolean | | 调试时设为 True |
-| return_metrics | boolean | | 返回值中包含指标数据，默认 True |
+| return_metrics | boolean | | 返回值中包含指标数据，默认 False |
 | image | List[Path] | | 附加图片 |
 | model | string | | 指定模型 |
 | timeout | int | | 空闲超时（秒），默认 300，无输出超过此时间触发 |

@@ -89,7 +89,7 @@ GLM-CODEX-MCP/
 - `log_metrics=True`：将指标输出到 stderr（JSONL 格式）
 
 #### 防递归调用
-GLM 的 system-prompt 包含约束，防止请求调用工具或声称自己是 Claude。
+GLM 调用时使用 `--setting-sources ""` 禁用所有设置源加载（包括 CLAUDE.md），从根本上防止 GLM 误读指示导致递归调用自身。
 
 ### 配置方案
 

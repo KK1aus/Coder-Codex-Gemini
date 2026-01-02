@@ -60,7 +60,7 @@ async def glm(
     ] = "workspace-write",
     SESSION_ID: Annotated[str, "会话 ID，用于多轮对话"] = "",
     return_all_messages: Annotated[bool, "是否返回完整消息"] = False,
-    return_metrics: Annotated[bool, "是否在返回值中包含指标数据"] = True,
+    return_metrics: Annotated[bool, "是否在返回值中包含指标数据"] = False,
     timeout: Annotated[int, "空闲超时（秒），无输出超过此时间触发超时，默认 300 秒"] = 300,
     max_duration: Annotated[int, "总时长硬上限（秒），默认 1800 秒（30 分钟），0 表示无限制"] = 1800,
     max_retries: Annotated[int, "最大重试次数，默认 0（GLM 有写入副作用，默认不重试）"] = 0,
@@ -127,7 +127,7 @@ async def codex(
         "允许在非 Git 仓库中运行",
     ] = True,
     return_all_messages: Annotated[bool, "是否返回完整消息"] = False,
-    return_metrics: Annotated[bool, "是否在返回值中包含指标数据"] = True,
+    return_metrics: Annotated[bool, "是否在返回值中包含指标数据"] = False,
     image: Annotated[
         Optional[List[Path]],
         Field(description="附加图片文件路径列表"),
