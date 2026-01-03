@@ -254,42 +254,46 @@ cp -r skills/glm-codex-workflow ~/.claude/skills/
 **Configure minimal CLAUDE.md** (add to `~/.claude/CLAUDE.md`):
 
 ```markdown
-# Global Configuration
+# Global Protocols
 
-## GLM-CODEX Collaboration
+## Mandatory Rules
 
-Code/document modification tasks will automatically trigger the `glm-codex-workflow` Skill.
+- **Default Collaboration**: All code/document modification tasks **must** be delegated to GLM for execution, and **must** call Codex for review after milestone completion
+- **Skip Requires Confirmation**: If you determine collaboration is unnecessary, **must immediately pause** and report:
+  > "This is a simple [description] task, I judge GLM/Codex is not needed. Do you agree? Waiting for your confirmation."
+- **Violation = Termination**: Skipping GLM execution or Codex review without confirmation = **workflow violation**
+- Except in rare special cases, always **mandatory** collaboration with GLM/Codex (MCP tools: `mcp__glm-codex__glm(PROMPT, cd)` / `mcp__glm-codex__codex(PROMPT, cd)`)
 
-GLM is your code executor, Codex is your code reviewer. **All decisions belong to you (Claude)**.
+---
 
-### Core Workflow
+# GLM-CODEX Collaboration
 
-1. **GLM Executes**: Delegate all modification tasks (code/docs) to GLM
-2. **Claude Verifies**: Quick check after GLM completes, fix issues yourself, continue to next task
-3. **Codex Reviews**: Call review after milestone development
+GLM is the code executor, Codex is the code reviewer. **All decision-making authority belongs to Claude**.
 
-### Quick Reference
+## Core Workflow
 
-- **GLM**: Execute modifications, `sandbox=workspace-write`
-- **Codex**: Code review, `sandbox=read-only` (no modifications allowed)
-- **Session Reuse**: Save `SESSION_ID` to maintain context
+1. **GLM Executes**: Delegate all modification tasks to GLM
+2. **Claude Verifies**: Quick check after GLM completes, fix issues yourself
+3. **Codex Reviews**: Call review after milestone development; if issues found, delegate to GLM for fixes, then re-enter **Claude Verifies**, iterate until fully passed.
 
-### Retry and Error Handling
+## Quick Reference
 
-- **Codex**: Allows 1 retry by default (read-only operations have no side effects)
-- **GLM**: No retry by default (has write side effects), can enable via `max_retries`
-- **Structured Errors**: Returns `error_kind` and `error_detail` on failure for troubleshooting
+| Tool | Purpose | sandbox | Retry |
+|------|---------|---------|-------|
+| GLM | Execute modifications | workspace-write | No retry by default |
+| Codex | Code review | read-only | 1 retry by default |
 
-### Pre-coding Preparation (Recommended for Complex Tasks)
+**Session Reuse**: Save `SESSION_ID` to maintain context
 
-1. Search for affected symbols/entry points globally
-2. List all files that need modification
-3. Specify clear modification checklist in PROMPT
-4. **Consult Codex for complex problems**: Codex is not only a reviewer but also a senior code consultant. Discuss architecture design or complex solutions before delegating to GLM
+## Pre-coding Preparation (Complex Tasks)
 
-### Independent Decision
+1. Search for affected symbols/entry points
+2. List files that need modification
+3. Consult Codex for complex solutions first
 
-GLM/Codex opinions are for reference only. You (Claude) are the final decision maker, think critically and make optimal decisions.
+## Independent Decision
+
+GLM/Codex opinions are for reference only. Claude is the final decision maker, think critically.
 ```
 
 **Advantages**:
