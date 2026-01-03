@@ -196,7 +196,7 @@ cp -r skills/gemini-collaboration ~/.claude/skills/
 - **跳过需确认**：若判断无需协作，**必须立即暂停**并报告：
   > "这是一个简单的[描述]任务，我判断无需调用 Coder/Codex。是否同意？等待您的确认。"
 - **违规即终止**：未经确认跳过 Coder 执行或 Codex 审核 = **流程违规**
-- **Skill 优先**：调用 MCP 工具前，**优先阅读对应 Skill**（`ccg-workflow`、`gemini-collaboration`）以了解最佳实践
+- **Skill 优先**：调用 MCP 工具前，**必须已阅读对应 Skill**（`ccg-workflow`、`gemini-collaboration`）以了解最佳实践
 - **会话复用**：始终保存 `SESSION_ID` 保持上下文
 
 ---
@@ -467,7 +467,6 @@ uv run ccg-mcp
 
 ## 📚 参考资源
 
-- **CodexMCP**: [GitHub](https://github.com/GuDaStudio/codexmcp) - 核心参考实现
 - **FastMCP**: [GitHub](https://github.com/jlowin/fastmcp) - 高效的 MCP 框架
 - **GLM API**: [智谱 AI](https://open.bigmodel.cn) - 强大的国产大模型（推荐作为 Coder 后端）
 - **Claude Code**: [Documentation](https://docs.anthropic.com/en/docs/claude-code)
