@@ -511,6 +511,36 @@ def safe_gemini_command(
         cleanup()
 
 
+def _filter_last_lines(lines: list[str], max_lines: int = 50) -> list[str]:
+    """过滤 last_lines，脱敏 tool_result 中的大内容
+
+    Gemini 的 JSONL 格式：tool_result 是独立的事件类型（type == "tool_result"）。
+    这里只脱敏 tool_result 的 content 字段，保留消息结构和所有其他上下文。
+    """
+    import copy
+    filtered = []
+    for line in lines:
+        try:
+            data = json.loads(line)
+            event_type = data.get("type", "")
+
+            # 脱敏 tool_result 内容
+            if event_type == "tool_result":
+                data = copy.deepcopy(data)
+                if "content" in data:
+                    data["content"] = "[truncated]"
+                filtered.append(json.dumps(data, ensure_ascii=False))
+                continue
+
+            # 其他消息类型正常保留
+            filtered.append(line)
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            # 非 JSON 行正常保留
+            filtered.append(line)
+
+    return filtered[-max_lines:]
+
+
 def _build_error_detail(
     message: str,
     exit_code: Optional[int] = None,
@@ -525,13 +555,21 @@ def _build_error_detail(
     if exit_code is not None:
         detail["exit_code"] = exit_code
     if last_lines:
-        detail["last_lines"] = last_lines[-20:]  # 最多保留 20 行
+        detail["last_lines"] = _filter_last_lines(last_lines, max_lines=50)
     if json_decode_errors > 0:
         detail["json_decode_errors"] = json_decode_errors
     if idle_timeout_s is not None:
         detail["idle_timeout_s"] = idle_timeout_s
+        detail["suggestion"] = (
+            "任务空闲超时（无输出）。建议：1) 增加 timeout 参数 "
+            "2) 检查任务是否卡住 3) 拆分为更小的子任务"
+        )
     if max_duration_s is not None:
         detail["max_duration_s"] = max_duration_s
+        detail["suggestion"] = (
+            "任务总时长超时。建议：1) 增加 max_duration 参数 "
+            "2) 拆分为更小的子任务 3) 检查是否存在死循环"
+        )
     if retries > 0:
         detail["retries"] = retries
     return detail
@@ -686,16 +724,26 @@ async def gemini_tool(
                 try:
                     for line in gen:
                         last_lines.append(line)
-                        if len(last_lines) > 20:
+                        if len(last_lines) > 50:
                             last_lines.pop(0)
 
                         try:
                             line_dict = json.loads(line.strip())
-                            all_messages.append(line_dict)
 
                             # stream-json 事件类型: init, message, tool_use, tool_result, error, result
                             # 参考: https://geminicli.com/docs/cli/headless/
                             event_type = line_dict.get("type", "")
+
+                            # 收集消息（脱敏 tool_result 内容）
+                            if return_all_messages:
+                                import copy
+                                safe_dict = copy.deepcopy(line_dict)
+                                # Gemini 的 tool_result 是独立事件类型
+                                if event_type == "tool_result":
+                                    # 脱敏 content 字段
+                                    if "content" in safe_dict:
+                                        safe_dict["content"] = "[truncated]"
+                                all_messages.append(safe_dict)
 
                             # 提取 message 事件中的内容
                             if event_type == "message":

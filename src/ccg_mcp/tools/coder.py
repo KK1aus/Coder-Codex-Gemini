@@ -214,10 +214,10 @@ def run_coder_command(
     GRACEFUL_SHUTDOWN_DELAY = 0.3
 
     def is_session_completed(line: str) -> bool:
-        """检查是否会话完成"""
+        """检查是否会话完成（stream-json 格式）"""
         try:
             data = json.loads(line)
-            # json 格式返回单个 result 对象
+            # stream-json 格式：result 或 error 类型表示会话结束
             return data.get("type") in ("result", "error")
         except (json.JSONDecodeError, AttributeError, TypeError):
             return False
@@ -411,9 +411,10 @@ def safe_coder_command(
         GRACEFUL_SHUTDOWN_DELAY = 0.3
 
         def is_session_completed(line: str) -> bool:
-            """检查是否会话完成"""
+            """检查是否会话完成（stream-json 格式）"""
             try:
                 data = json.loads(line)
+                # stream-json 格式：result 或 error 类型表示会话结束
                 return data.get("type") in ("result", "error")
             except (json.JSONDecodeError, AttributeError, TypeError):
                 return False
@@ -519,6 +520,46 @@ def safe_coder_command(
         cleanup()
 
 
+def _filter_last_lines(lines: list[str], max_lines: int = 50) -> list[str]:
+    """过滤 last_lines，脱敏 tool_result 中的大内容
+
+    stream-json 格式的 user 消息通常包含 tool_result，其中可能有大量文件内容。
+    这里只脱敏 tool_result 的 content 字段，保留消息结构和所有其他上下文。
+    """
+    import copy
+    filtered = []
+    for line in lines:
+        try:
+            data = json.loads(line)
+            msg_type = data.get("type", "")
+
+            # 脱敏 user 消息中的 tool_result 内容（就地修改，保留完整结构）
+            if msg_type == "user":
+                message = data.get("message", {})
+                content = message.get("content")
+                # 类型防御：只处理 list 类型的 content
+                if isinstance(content, list):
+                    # 深拷贝以避免修改原始数据
+                    data = copy.deepcopy(data)
+                    for block in data["message"]["content"]:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            # 只替换 content 字段，保留其他所有字段
+                            block["content"] = "[truncated]"
+                    filtered.append(json.dumps(data, ensure_ascii=False))
+                else:
+                    # content 不是 list，原样保留（可能格式异常）
+                    filtered.append(line)
+                continue
+
+            # 其他消息类型正常保留
+            filtered.append(line)
+        except (json.JSONDecodeError, TypeError, AttributeError):
+            # 非 JSON 行正常保留
+            filtered.append(line)
+
+    return filtered[-max_lines:]
+
+
 def _build_error_detail(
     message: str,
     exit_code: Optional[int] = None,
@@ -533,13 +574,21 @@ def _build_error_detail(
     if exit_code is not None:
         detail["exit_code"] = exit_code
     if last_lines:
-        detail["last_lines"] = last_lines[-20:]  # 最多保留 20 行
+        detail["last_lines"] = _filter_last_lines(last_lines, max_lines=50)
     if json_decode_errors > 0:
         detail["json_decode_errors"] = json_decode_errors
     if idle_timeout_s is not None:
         detail["idle_timeout_s"] = idle_timeout_s
+        detail["suggestion"] = (
+            "任务空闲超时（无输出）。建议：1) 增加 timeout 参数 "
+            "2) 检查任务是否卡住 3) 拆分为更小的子任务"
+        )
     if max_duration_s is not None:
         detail["max_duration_s"] = max_duration_s
+        detail["suggestion"] = (
+            "任务总时长超时。建议：1) 增加 max_duration 参数 "
+            "2) 拆分为更小的子任务 3) 检查是否存在死循环"
+        )
     if retries > 0:
         detail["retries"] = retries
     return detail
@@ -614,18 +663,19 @@ async def coder_tool(
     cmd = [
         "claude",
         "-p",                                    # 1. 运行模式
-        "--output-format", "json",               # 2. 输出格式
-        "--setting-sources", "project",          # 3. 设置源（仅加载项目级设置）
+        "--output-format", "stream-json",        # 2. 输出格式（流式 JSON，支持中间状态）
+        "--verbose",                             # 3. stream-json 在 -p 模式下需要 --verbose
+        "--setting-sources", "project",          # 4. 设置源（仅加载项目级设置）
     ]
 
-    # 4. 安全策略
+    # 5. 安全策略
     if sandbox != "read-only":
         cmd.append("--dangerously-skip-permissions")
 
-    # 5. 全局设定（Prompt 注入）
+    # 6. 全局设定（Prompt 注入）
     cmd.extend(["--append-system-prompt", CODER_SYSTEM_PROMPT])
 
-    # 6. 动态变量（会话恢复）
+    # 7. 动态变量（会话恢复）
     if SESSION_ID:
         cmd.extend(["-r", SESSION_ID])
 
@@ -650,27 +700,64 @@ async def coder_tool(
         json_decode_errors = 0
         error_kind: Optional[str] = None
         last_lines: list[str] = []
+        assistant_text_parts: list[str] = []  # 累积所有 assistant 消息的文本（多轮对话拼接）
 
         try:
             with safe_coder_command(cmd, env, cd, timeout, max_duration, prompt=normalized_prompt) as gen:
                 try:
                     for line in gen:
                         last_lines.append(line)
-                        if len(last_lines) > 20:
+                        if len(last_lines) > 50:  # 增加到 50 行以便更好的诊断
                             last_lines.pop(0)
 
                         try:
                             line_dict = json.loads(line.strip())
-                            all_messages.append(line_dict)
-
                             msg_type = line_dict.get("type", "")
 
-                            if msg_type == "result":
-                                result_content = line_dict.get("result", "")
+                            # 收集完整消息（user 消息需要脱敏 tool_result）
+                            if return_all_messages:
+                                if msg_type == "user":
+                                    # 脱敏 user 消息中的 tool_result 内容
+                                    import copy
+                                    safe_dict = copy.deepcopy(line_dict)
+                                    message = safe_dict.get("message", {})
+                                    content = message.get("content")
+                                    if isinstance(content, list):
+                                        for block in content:
+                                            if isinstance(block, dict) and block.get("type") == "tool_result":
+                                                block["content"] = "[truncated]"
+                                    all_messages.append(safe_dict)
+                                else:
+                                    all_messages.append(line_dict)
+
+                            # S0.3: 从 system/init 消息提取 session_id
+                            if msg_type == "system" and line_dict.get("subtype") == "init":
                                 session_id = line_dict.get("session_id")
+
+                            # S0.4: 从 assistant 消息提取文本（多轮对话拼接）
+                            elif msg_type == "assistant":
+                                message = line_dict.get("message", {})
+                                content = message.get("content")
+                                # 类型守卫：只处理 list 类型的 content
+                                if isinstance(content, list):
+                                    for block in content:
+                                        if isinstance(block, dict):
+                                            if block.get("type") == "text":
+                                                text = block.get("text", "")
+                                                if text:
+                                                    assistant_text_parts.append(text)
+
+                            # 处理 result 类型（stream-json 中可能也有）
+                            elif msg_type == "result":
+                                # stream-json 的 result 可能包含完整结果或仅包含 stats
+                                if "result" in line_dict:
+                                    result_content = line_dict.get("result", "")
+                                # session_id 也可能在 result 中（兼容）
+                                if not session_id and "session_id" in line_dict:
+                                    session_id = line_dict.get("session_id")
                                 if line_dict.get("is_error"):
                                     had_error = True
-                                    err_message = result_content
+                                    err_message = line_dict.get("result", "") or line_dict.get("error", "")
                                     error_kind = ErrorKind.UPSTREAM_ERROR
 
                             elif msg_type == "error":
@@ -692,6 +779,10 @@ async def coder_tool(
                     # 正确捕获生成器返回值
                     if isinstance(e.value, tuple) and len(e.value) == 2:
                         exit_code, raw_output_lines = e.value
+
+            # 如果没有从 result 获取到内容，拼接所有 assistant 消息的文本
+            if not result_content and assistant_text_parts:
+                result_content = "\n\n".join(assistant_text_parts)
 
         except CommandNotFoundError as e:
             metrics.finish(
