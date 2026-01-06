@@ -85,16 +85,22 @@ flowchart TB
     subgraph ToolLayer ["Execution Layer"]
         Coder["🔨 Coder Tool<br><code>claude CLI → Configurable Backend</code><br>sandbox: workspace-write"]
         Codex["⚖️ Codex Tool<br><code>codex CLI</code><br>sandbox: read-only"]
+        Gemini["🧠 Gemini Tool<br><code>gemini CLI</code><br>sandbox: workspace-write"]
     end
 
     User --> Claude
     Claude --> Prompt
-    Prompt -->|"coder(PROMPT, cd)"| MCP
-    MCP -->|"Stream JSON"| Coder
-    Coder -->|"SESSION_ID + result"| Review
+    Prompt -->|"coder / gemini"| MCP
 
-    Review -->|"Needs Review"| MCP
+    MCP -->|"Stream JSON"| Coder
+    MCP -->|"Stream JSON"| Gemini
+
+    Coder -->|"SESSION_ID + result"| Review
+    Gemini -->|"SESSION_ID + result"| Review
+
+    Review -->|"Needs Review / Expert Opinion"| MCP
     MCP -->|"Stream JSON"| Codex
+
     Codex -->|"SESSION_ID + Review Verdict"| Review
 
     Review -->|"✅ Approved"| Done(["🎉 Task Complete"])
@@ -109,11 +115,11 @@ flowchart TB
        ↓
 2. Claude analyzes, decomposes tasks, constructs precise Prompt
        ↓
-3. Calls coder tool → Backend model executes code generation/modification
+3. Calls coder (or gemini) tool → Execute code generation/modification
        ↓
-4. Claude reviews results, decides if Codex review is needed
+4. Claude reviews results, decides if Codex review or Gemini consultation is needed
        ↓
-5. Calls codex tool → Codex performs independent Code Review
+5. Calls codex (or gemini) tool → Independent Code Review / Get second opinion
        ↓
 6. Based on verdict: Approve / Optimize / Re-execute
 ```
@@ -279,7 +285,7 @@ Add mandatory rules to `~/.claude/CLAUDE.md` to ensure Claude follows the collab
 - **Skip Requires Confirmation**: If you determine collaboration is unnecessary, **must immediately pause** and report:
   > "This is a simple [description] task, I judge Coder/Codex is not needed. Do you agree? Waiting for your confirmation."
 - **Violation = Termination**: Skipping Coder execution or Codex review without confirmation = **workflow violation**
-- **Session Reuse**: Always save `SESSION_ID` to maintain context
+- **Mandatory Session Reuse**: Always save the received `SESSION_ID` and include it in request parameters to maintain context
 - **SESSION_ID Management**: Each role (Coder/Codex/Gemini) has independent SESSION_IDs. Always use the actual SESSION_ID returned by MCP tool responses. Never create IDs manually or mix IDs across different roles
 
 ## ⚠️ Skill Reading Prerequisite (Mandatory)
