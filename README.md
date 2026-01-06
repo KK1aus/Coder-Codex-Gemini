@@ -603,10 +603,7 @@ cd Coder-Codex-Gemini
 # 2. 安装依赖 (使用 uv)
 uv sync
 
-# 3. 运行测试
-uv run pytest
-
-# 4. 本地调试运行
+# 3. 本地调试运行
 uv run ccg-mcp
 ```
 

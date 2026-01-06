@@ -575,10 +575,7 @@ cd Coder-Codex-Gemini
 # 2. Install dependencies (using uv)
 uv sync
 
-# 3. Run tests
-uv run pytest
-
-# 4. Local debug run
+# 3. Local debug run
 uv run ccg-mcp
 ```
 
