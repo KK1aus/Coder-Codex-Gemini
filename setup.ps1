@@ -258,18 +258,25 @@ try {
             $model = "glm-4.7"
         }
 
+        # Escape special characters for TOML string values (backslash and double quote)
+        $safeApiToken = $apiToken -replace '\\', '\\' -replace '"', '\"'
+        $safeBaseUrl = $baseUrl -replace '\\', '\\' -replace '"', '\"'
+        $safeModel = $model -replace '\\', '\\' -replace '"', '\"'
+
         # Generate config.toml
         $configContent = @"
 [coder]
-api_token = "$apiToken"
-base_url = "$baseUrl"
-model = "$model"
+api_token = "$safeApiToken"
+base_url = "$safeBaseUrl"
+model = "$safeModel"
 
 [coder.env]
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
 "@
 
-        Set-Content -Path $configPath -Value $configContent -Encoding UTF8
+        # Use UTF8 without BOM - critical for TOML parsers
+        # PowerShell 5.x's "Set-Content -Encoding UTF8" writes BOM (EF BB BF) which breaks TOML parsing
+        [System.IO.File]::WriteAllText($configPath, $configContent, [System.Text.UTF8Encoding]::new($false))
 
         # Set file permissions - only current user can read/write
         $acl = Get-Acl $configPath

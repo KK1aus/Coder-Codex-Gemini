@@ -236,12 +236,17 @@ if [ -z "$MODEL" ]; then
     MODEL="glm-4.7"
 fi
 
+# Escape special characters for TOML string values (backslash and double quote)
+SAFE_API_TOKEN=$(printf '%s' "$API_TOKEN" | sed 's/\\/\\\\/g; s/"/\\"/g')
+SAFE_BASE_URL=$(printf '%s' "$BASE_URL" | sed 's/\\/\\\\/g; s/"/\\"/g')
+SAFE_MODEL=$(printf '%s' "$MODEL" | sed 's/\\/\\\\/g; s/"/\\"/g')
+
 # Generate config.toml
 cat > "$CONFIG_PATH" << EOF
 [coder]
-api_token = "$API_TOKEN"
-base_url = "$BASE_URL"
-model = "$MODEL"
+api_token = "$SAFE_API_TOKEN"
+base_url = "$SAFE_BASE_URL"
+model = "$SAFE_MODEL"
 
 [coder.env]
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
