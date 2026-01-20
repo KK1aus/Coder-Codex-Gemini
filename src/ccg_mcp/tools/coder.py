@@ -1,12 +1,12 @@
 """Coder 工具实现
 
-调用可配置的后端模型执行代码生成或修改任务。
-通过设置环境变量让 claude CLI 使用配置的模型后端（如 GLM-4.7、Minimax、DeepSeek 等）。
+调用 claude-glm (GLM-4.7) 执行代码生成或修改任务。
 """
 
 from __future__ import annotations
 
 import json
+import os
 import queue
 import shutil
 import subprocess
@@ -19,8 +19,6 @@ from pathlib import Path
 from typing import Annotated, Any, Dict, Generator, Iterator, Literal, Optional
 
 from pydantic import Field
-
-from ccg_mcp.config import build_coder_env, get_config
 
 
 # ============================================================================
@@ -80,6 +78,10 @@ class MetricsCollector:
         self.result_lines: int = 0
         self.raw_output_lines: int = 0
         self.json_decode_errors: int = 0
+        # Token 统计
+        self.input_tokens: int = 0
+        self.output_tokens: int = 0
+        self.total_tokens: int = 0
 
     def finish(
         self,
@@ -90,6 +92,8 @@ class MetricsCollector:
         raw_output_lines: int = 0,
         json_decode_errors: int = 0,
         retries: int = 0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> None:
         """完成指标收集"""
         self.ts_end = datetime.now(timezone.utc)
@@ -102,6 +106,9 @@ class MetricsCollector:
         self.raw_output_lines = raw_output_lines
         self.json_decode_errors = json_decode_errors
         self.retries = retries
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.total_tokens = input_tokens + output_tokens
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -109,6 +116,7 @@ class MetricsCollector:
             "ts_start": self.ts_start.isoformat() if self.ts_start else None,
             "ts_end": self.ts_end.isoformat() if self.ts_end else None,
             "duration_ms": self.duration_ms,
+            "duration_seconds": self.duration_ms / 1000,  # 添加秒为单位的耗时
             "tool": self.tool,
             "sandbox": self.sandbox,
             "success": self.success,
@@ -121,6 +129,9 @@ class MetricsCollector:
             "result_lines": self.result_lines,
             "raw_output_lines": self.raw_output_lines,
             "json_decode_errors": self.json_decode_errors,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
         }
 
     def format_duration(self) -> str:
@@ -173,22 +184,22 @@ def run_coder_command(
         CommandNotFoundError: claude CLI 未安装时抛出
         CommandTimeoutError: 命令执行超时时抛出
     """
-    # 查找 claude CLI 路径
-    claude_path = shutil.which('claude')
-    if not claude_path:
+    # 查找 claude-glm CLI 路径
+    claude_glm_path = shutil.which('claude-glm')
+    if not claude_glm_path:
         raise CommandNotFoundError(
-            "未找到 claude CLI。请确保已安装 Claude Code CLI 并添加到 PATH。\n"
-            "安装指南：https://docs.anthropic.com/en/docs/claude-code"
+            "未找到 claude-glm CLI。请确保已安装 claude-glm 并添加到 PATH。\n"
+            "安装方式：参考你的 claude-glm 封装项目"
         )
     popen_cmd = cmd.copy()
-    popen_cmd[0] = claude_path
+    popen_cmd[0] = claude_glm_path
 
     process = subprocess.Popen(
         popen_cmd,
         shell=False,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.DEVNULL,  # claude-glm CLI 的日志输出到 stderr，我们只关心 JSON 格式的 stdout
         universal_newlines=True,
         encoding='utf-8',
         errors='replace',  # 处理非 UTF-8 字符，避免 UnicodeDecodeError
@@ -340,22 +351,22 @@ def safe_coder_command(
             for line in gen:
                 process_line(line)
     """
-    # 查找 claude CLI 路径
-    claude_path = shutil.which('claude')
-    if not claude_path:
+    # 查找 claude-glm CLI 路径
+    claude_glm_path = shutil.which('claude-glm')
+    if not claude_glm_path:
         raise CommandNotFoundError(
-            "未找到 claude CLI。请确保已安装 Claude Code CLI 并添加到 PATH。\n"
-            "安装指南：https://docs.anthropic.com/en/docs/claude-code"
+            "未找到 claude-glm CLI。请确保已安装 claude-glm 并添加到 PATH。\n"
+            "安装方式：参考你的 claude-glm 封装项目"
         )
     popen_cmd = cmd.copy()
-    popen_cmd[0] = claude_path
+    popen_cmd[0] = claude_glm_path
 
     process = subprocess.Popen(
         popen_cmd,
         shell=False,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.DEVNULL,  # claude-glm CLI 的日志输出到 stderr，我们只关心 JSON 格式的 stdout
         universal_newlines=True,
         encoding='utf-8',
         errors='replace',  # 处理非 UTF-8 字符，避免 UnicodeDecodeError
@@ -638,34 +649,15 @@ async def coder_tool(
     # 初始化指标收集器
     metrics = MetricsCollector(tool="coder", prompt=PROMPT, sandbox=sandbox)
 
-    # 获取配置并构建环境变量
-    try:
-        config = get_config()
-        env = build_coder_env(config)
-    except Exception as e:
-        error_msg = f"配置加载失败：{e}"
-        metrics.finish(success=False, error_kind=ErrorKind.CONFIG_ERROR)
-        if log_metrics:
-            metrics.log_to_stderr()
-
-        result: Dict[str, Any] = {
-            "success": False,
-            "tool": "coder",
-            "error": error_msg,
-            "error_kind": ErrorKind.CONFIG_ERROR,
-            "error_detail": _build_error_detail(error_msg),
-        }
-        if return_metrics:
-            result["metrics"] = metrics.to_dict()
-        return result
+    # 构建环境变量（直接复制，不注入配置）
+    env = os.environ.copy()
 
     # 构建命令（按逻辑分层排序）
     cmd = [
-        "claude",
+        "claude-glm",
         "-p",                                    # 1. 运行模式
         "--output-format", "stream-json",        # 2. 输出格式（流式 JSON，支持中间状态）
         "--verbose",                             # 3. stream-json 在 -p 模式下需要 --verbose
-        "--setting-sources", "project",          # 4. 设置源（仅加载项目级设置）
     ]
 
     # 5. 安全策略
@@ -701,6 +693,8 @@ async def coder_tool(
         error_kind: Optional[str] = None
         last_lines: list[str] = []
         assistant_text_parts: list[str] = []  # 累积所有 assistant 消息的文本（多轮对话拼接）
+        input_tokens: int = 0  # Token 统计
+        output_tokens: int = 0
 
         try:
             with safe_coder_command(cmd, env, cd, timeout, max_duration, prompt=normalized_prompt) as gen:
@@ -752,6 +746,11 @@ async def coder_tool(
                                 # stream-json 的 result 可能包含完整结果或仅包含 stats
                                 if "result" in line_dict:
                                     result_content = line_dict.get("result", "")
+                                # 提取 token 使用统计
+                                if "usage" in line_dict:
+                                    usage = line_dict.get("usage", {})
+                                    input_tokens = usage.get("input_tokens", 0)
+                                    output_tokens = usage.get("output_tokens", 0)
                                 # session_id 也可能在 result 中（兼容）
                                 if not session_id and "session_id" in line_dict:
                                     session_id = line_dict.get("session_id")
@@ -874,6 +873,8 @@ async def coder_tool(
         raw_output_lines=raw_output_lines,
         json_decode_errors=json_decode_errors,
         retries=retries,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
     )
     if log_metrics:
         metrics.log_to_stderr()
