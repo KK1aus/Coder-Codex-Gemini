@@ -78,6 +78,10 @@ class MetricsCollector:
         self.result_lines: int = 0
         self.raw_output_lines: int = 0
         self.json_decode_errors: int = 0
+        # Token 统计
+        self.input_tokens: int = 0
+        self.output_tokens: int = 0
+        self.total_tokens: int = 0
 
     def finish(
         self,
@@ -88,6 +92,8 @@ class MetricsCollector:
         raw_output_lines: int = 0,
         json_decode_errors: int = 0,
         retries: int = 0,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
     ) -> None:
         """完成指标收集"""
         self.ts_end = datetime.now(timezone.utc)
@@ -100,6 +106,9 @@ class MetricsCollector:
         self.raw_output_lines = raw_output_lines
         self.json_decode_errors = json_decode_errors
         self.retries = retries
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+        self.total_tokens = input_tokens + output_tokens
 
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典"""
@@ -107,6 +116,7 @@ class MetricsCollector:
             "ts_start": self.ts_start.isoformat() if self.ts_start else None,
             "ts_end": self.ts_end.isoformat() if self.ts_end else None,
             "duration_ms": self.duration_ms,
+            "duration_seconds": self.duration_ms / 1000,  # 添加秒为单位的耗时
             "tool": self.tool,
             "sandbox": self.sandbox,
             "success": self.success,
@@ -119,6 +129,9 @@ class MetricsCollector:
             "result_lines": self.result_lines,
             "raw_output_lines": self.raw_output_lines,
             "json_decode_errors": self.json_decode_errors,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "total_tokens": self.total_tokens,
         }
 
     def format_duration(self) -> str:
@@ -186,7 +199,7 @@ def run_coder_command(
         shell=False,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.DEVNULL,  # claude-glm CLI 的日志输出到 stderr，我们只关心 JSON 格式的 stdout
         universal_newlines=True,
         encoding='utf-8',
         errors='replace',  # 处理非 UTF-8 字符，避免 UnicodeDecodeError
@@ -353,7 +366,7 @@ def safe_coder_command(
         shell=False,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
+        stderr=subprocess.DEVNULL,  # claude-glm CLI 的日志输出到 stderr，我们只关心 JSON 格式的 stdout
         universal_newlines=True,
         encoding='utf-8',
         errors='replace',  # 处理非 UTF-8 字符，避免 UnicodeDecodeError
@@ -680,6 +693,8 @@ async def coder_tool(
         error_kind: Optional[str] = None
         last_lines: list[str] = []
         assistant_text_parts: list[str] = []  # 累积所有 assistant 消息的文本（多轮对话拼接）
+        input_tokens: int = 0  # Token 统计
+        output_tokens: int = 0
 
         try:
             with safe_coder_command(cmd, env, cd, timeout, max_duration, prompt=normalized_prompt) as gen:
@@ -731,6 +746,11 @@ async def coder_tool(
                                 # stream-json 的 result 可能包含完整结果或仅包含 stats
                                 if "result" in line_dict:
                                     result_content = line_dict.get("result", "")
+                                # 提取 token 使用统计
+                                if "usage" in line_dict:
+                                    usage = line_dict.get("usage", {})
+                                    input_tokens = usage.get("input_tokens", 0)
+                                    output_tokens = usage.get("output_tokens", 0)
                                 # session_id 也可能在 result 中（兼容）
                                 if not session_id and "session_id" in line_dict:
                                     session_id = line_dict.get("session_id")
@@ -853,6 +873,8 @@ async def coder_tool(
         raw_output_lines=raw_output_lines,
         json_decode_errors=json_decode_errors,
         retries=retries,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
     )
     if log_metrics:
         metrics.log_to_stderr()
