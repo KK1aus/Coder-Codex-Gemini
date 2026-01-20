@@ -680,13 +680,17 @@ async def coder_tool(
     last_error: Optional[Dict[str, Any]] = None
     all_last_lines: list[str] = []
 
+    # 注意：SESSION_ID 参数仅用于恢复已存在的会话
+    # 如果是首次调用或 SESSION_ID 无效，claude-glm 会创建新 session 并返回新的 session_id
+    # 我们不在这里预先设置 session_id，而是从 CLI 的输出中提取
+
     while retries <= max_retries:
         all_messages: list[Dict[str, Any]] = []
         result_content = ""
         success = True
         had_error = False
         err_message = ""
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None  # 从 CLI 输出中提取，不预设值
         exit_code: Optional[int] = None
         raw_output_lines = 0
         json_decode_errors = 0

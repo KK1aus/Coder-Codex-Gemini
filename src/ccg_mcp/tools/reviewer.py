@@ -693,12 +693,16 @@ async def reviewer_tool(
     last_error: Optional[Dict[str, Any]] = None
     all_last_lines: list[str] = []
 
+    # 注意：SESSION_ID 参数仅用于恢复已存在的会话
+    # 如果是首次调用或 SESSION_ID 无效，gemini 会创建新 session 并返回新的 session_id
+    # 我们不在这里预先设置 session_id，而是从 gemini 的输出中提取
+
     while retries <= max_retries:
         all_messages: list[Dict[str, Any]] = []
         agent_messages = ""
         had_error = False
         err_message = ""
-        session_id: Optional[str] = None  # 初始化 session_id 变量
+        session_id: Optional[str] = None  # 从 gemini 输出中提取，不预设值
         thread_id: Optional[str] = None
         exit_code: Optional[int] = None
         raw_output_lines = 0
@@ -890,7 +894,7 @@ async def reviewer_tool(
         result = {
             "success": True,
             "tool": "reviewer",
-            "SESSION_ID": thread_id,
+            "SESSION_ID": session_id,  # 返回提取到的 session_id，不是 thread_id
             "result": agent_messages,
             "duration": metrics.format_duration(),
         }
