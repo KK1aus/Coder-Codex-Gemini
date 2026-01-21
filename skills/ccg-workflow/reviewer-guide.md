@@ -1,4 +1,4 @@
-# Codex 工具详细规范
+# Reviewer 工具详细规范
 
 ## 参数说明
 
@@ -23,15 +23,21 @@
 // 成功
 {
   "success": true,
-  "tool": "codex",
+  "tool": "reviewer",
   "SESSION_ID": "uuid-string",
-  "result": "Codex 审核结论"
+  "result": "Reviewer 审核结论",
+  "metrics": {
+    "duration_seconds": 8.5,
+    "input_tokens": 7227,
+    "output_tokens": 0,
+    "total_tokens": 7227
+  }
 }
 
 // 失败（结构化错误）
 {
   "success": false,
-  "tool": "codex",
+  "tool": "reviewer",
   "error": "错误摘要信息",
   "error_kind": "idle_timeout | timeout | command_not_found | upstream_error | ...",
   "error_detail": {
@@ -52,7 +58,7 @@
 |----|------|
 | `idle_timeout` | 空闲超时（无输出） |
 | `timeout` | 总时长超时 |
-| `command_not_found` | codex CLI 未安装 |
+| `command_not_found` | gemini CLI 未安装 |
 | `upstream_error` | CLI 返回错误 |
 | `json_decode` | JSON 解析失败 |
 | `protocol_missing_session` | 未获取 SESSION_ID |
@@ -69,27 +75,38 @@
 **改动目的**：[简要描述]
 
 **请检查**：
-1. 代码质量（可读性、可维护性）
-2. 潜在 Bug 或边界情况
-3. 需求完成度
+1. 代码质量（可读性、可维护性、潜在 bug）
+2. 需求完成度
+3. TypeScript 类型安全（如适用）
+4. 性能优化建议
+5. 架构设计合理性
 
 **请给出明确结论**：
-- ✅ 通过：代码质量良好，可以合入
+- ✅ 通过：代码质量良好，可以发布/合入
 - ⚠️ 建议优化：[具体建议]
 - ❌ 需要修改：[具体问题]
 ```
 
 ## 使用规范
 
-1. **严格边界**：必须 `sandbox="read-only"`，Codex 严禁修改代码
-2. **必须保存** `SESSION_ID` 以便多轮对话
+1. **严格边界**：必须 `sandbox="read-only"`，Reviewer 严禁修改代码
+2. **必须保存** `SESSION_ID` 以便多轮对话（各工具 SESSION_ID 相互独立）
 3. 检查 `success` 字段判断审核是否成功
 4. 从 `result` 字段获取审核结论
 5. 失败时检查 `error_kind` 了解失败原因
+6. 首次调用：不传递 SESSION_ID，让 CLI 创建新 session
+7. 后续调用：传递上次返回的 SESSION_ID 以恢复会话
 
 ## 重试策略
 
-Codex 默认允许 **1 次自动重试**（只读操作无副作用）：
+Reviewer 默认允许 **1 次自动重试**（只读操作无副作用）：
 - 超时、网络错误等会自动重试
 - `command_not_found` 不会重试（需用户干预）
 - 重试采用指数退避（0.5s → 1s → 2s）
+
+## 技术实现
+
+- **后端 CLI**: gemini CLI (https://github.com/google-gemini/gemini-cli)
+- **输出格式**: stream-json (`gemini -o stream-json`)
+- **Session 管理**: 通过 `--resume SESSION_ID` 恢复会话
+- **沙箱强制**: 默认 `read-only`，确保不会修改代码
