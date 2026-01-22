@@ -1,9 +1,10 @@
 ---
 name: ccg-workflow
 description: |
-  Coder-Reviewer-MCP collaboration for code and document tasks.
-  Use when: writing/modifying code, editing documents, implementing features, fixing bugs, refactoring, or code review.
-  协调 Coder 执行代码/文档改动，Reviewer 审核代码质量。
+  MANDATORY workflow for all code/document tasks. Use when: writing/modifying code, editing documents, implementing features, fixing bugs, refactoring, or completing tasks.
+  This skill enforces: 1) Delegate changes to Coder, 2) Verify quality yourself, 3) MUST call Reviewer after milestones (modules, 3+ tasks, before commits, complex bug fixes, refactoring, plan completion).
+  🚫 NEVER skip Reviewer without explicit user confirmation.
+  协调 Coder 执行代码/文档改动，强制要求在里程碑后调用 Reviewer 审核。
 ---
 
 # Coder-Reviewer-MCP 协作流程
@@ -44,6 +45,67 @@ Coder 执行完毕后，Claude 快速读取验收：
 阶段性开发完成后，调用 Reviewer review：
 - 检查代码质量、潜在 Bug
 - 结论：✅ 通过 / ⚠️ 优化 / ❌ 修改
+
+## ⚠️ 何时必须调用 Reviewer
+
+### 强制触发（Mandatory）
+
+**必须**在以下时机调用 Reviewer 审核：
+
+- ✅ **Coder 完成一个独立功能模块后**
+  - 例如：完成一个 API 接口、一个 UI 组件、一个数据处理流程
+- ✅ **完成 3 个及以上连续任务后**
+  - 即使每个任务很小，累计 3 个也必须 review
+- ✅ **准备提交代码或创建 PR 前**
+  - 任何即将推送到远程仓库的代码
+- ✅ **修复复杂 bug 后**
+  - 非简单 typo 的 bug 修复
+- ✅ **重构代码后**
+  - 任何涉及架构调整的重构
+- ✅ **实现计划文档中的所有任务后**
+  - 完整执行完 docs/plans/*.md 或 docs/designs/*.md 中的任务列表
+
+### 可选但有价值（Optional but Valuable）
+
+以下情况强烈建议调用 Reviewer：
+
+- 🔹 遇到困难需要 fresh perspective（新视角）
+- 🔹 不确定代码质量或设计合理性
+- 🔹 重要功能开发前（baseline check）
+- 🔹 大规模代码改动前（确认方向）
+
+### 🚫 禁止跳过
+
+**绝不**因为以下理由跳过 review：
+
+- ❌ "看起来很简单" - 简单代码也可能有隐藏问题
+- ❌ "赶时间" - 质量比速度更重要
+- ❌ "只是小修改" - 小修改也可能引入 bug
+- ❌ "我很确信没问题" - 所有人都会犯错
+- ❌ "Reviewer 可能会反对" - Reviewer 的意见是帮助改进
+
+### 📋 调用 Reviewer 的标准流程
+
+1. **准备审核信息**：
+   - 列出改动的文件列表
+   - 说明改动目的和背景
+   - 提供相关的计划文档或需求
+
+2. **调用 mcp__ccg_reviewer 工具**：
+   ```
+   PROMPT: 请 review 以下代码改动：
+   **改动文件**：[文件列表]
+   **改动目的**：[简要描述]
+   **请检查**：
+   1. 代码质量（可读性、可维护性、潜在 bug）
+   2. 需求完成度
+   3. 给出明确结论：✅ 通过 / ⚠️ 优化 / ❌ 修改
+   ```
+
+3. **处理审核结果**：
+   - ✅ 通过 → 继续下一任务
+   - ⚠️ 建议优化 → 根据反馈委托 Coder 修复，然后重新 review
+   - ❌ 需要修改 → 委托 Coder 修复，必须重新 review 直至通过
 
 ## 工具参考
 
