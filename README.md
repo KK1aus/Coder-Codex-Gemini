@@ -292,6 +292,99 @@ cp -r skills/ccg-workflow ~/.claude/skills/
 - ❌ 跳过 Skill 直接调用 MCP 工具
 - ❌ 假设已了解最佳实践而不执行 Skill
 
+## 📋 Plan 审核协议（强制）
+
+### 强制规则
+
+**所有 implementation plan 必须经过 Reviewer 自动审核，审核不通过不得进入执行阶段。**
+
+### 触发条件
+
+当以下操作发生时，**必须**触发自动审核流程：
+
+1. **文件路径匹配**：
+   - `docs/plans/*.md`
+   - `docs/designs/*.md`
+
+2. **内容特征**：包含以下章节
+   - "Implementation Plan"
+   - "Architecture"
+   - "Tech Stack"
+
+3. **操作类型**：
+   - 创建新的 plan 文件
+   - 修改现有 plan 文件
+
+### 审核流程
+
+**步骤 1：准备审核**
+- 读取刚保存的 plan 文件内容
+- **必须**先执行 `/ccg-workflow` skill
+- 准备 Reviewer 的 Prompt（见下方模板）
+
+**步骤 2：调用 Reviewer**
+
+使用 `mcp__ccg_reviewer` 工具，参数：
+- `PROMPT`:（见下方 Prompt 模板）
+- `cd`: 当前工作目录
+- `sandbox`: `"read-only"`
+- 保存返回的 `SESSION_ID`（用于迭代）
+
+**步骤 3：处理审核结果**
+
+- **✅ 通过**：标记 plan 审核完成，继续执行后续流程
+- **⚠️ 建议优化 或 ❌ 需要修改**：
+  - 解析 Reviewer 的反馈意见
+  - 根据反馈自动修改 plan 文件
+  - 迭代计数器 +1
+  - 如果迭代次数 < 3：回到步骤 2 重新审核
+  - 如果迭代次数 == 3：执行降级处理
+
+**步骤 4：降级处理（达到迭代上限）**
+
+报告："Plan 审核未能在 3 次迭代内通过，需要手动处理"
+显示 Reviewer 的最后反馈内容
+询问用户：
+- A) 手动修改 plan
+- B) 放弃审核继续执行
+- C) 其他处理
+
+### Reviewer Prompt 模板
+
+```markdown
+请 review 以下 implementation plan：
+
+**文件路径**：{plan_file_path}
+
+**审核标准**：
+1. 完整性：是否包含所有必要章节（目标、架构、任务分解）
+2. 可行性：任务是否具体可执行，是否有清晰的验收标准
+3. 最佳实践：是否遵循 DRY、YAGNI、TDD 原则
+4. 文件路径：所有文件路径是否准确
+5. 代码示例：是否提供完整的代码示例
+
+**请给出明确结论**：
+- ✅ 通过：plan 质量良好，可以执行
+- ⚠️ 建议优化：[具体建议]
+- ❌ 需要修改：[具体问题]
+```
+
+### SESSION_ID 管理
+
+- Plan 审核使用独立的 `review_session_id`
+- 与 `coder_session_id` 分开存储
+- 每次迭代使用 Reviewer 返回的新 SESSION_ID
+- 内存维护：`{"plan_review_session": "xxx", "iteration_count": 0}`
+
+### 例外情况
+
+仅在以下情况下可跳过审核：
+- 简单 bug 修复 plan（少于 3 个任务）
+- 用户显式要求跳过
+
+**跳过时必须报告**：
+> "这是一个简单的 plan，我判断无需 Reviewer 审核。是否同意？等待您的确认。"
+
 ---
 
 # AI 协作体系
